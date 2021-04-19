@@ -1,0 +1,146 @@
+---
+title: "assetDatabaseConnect"
+author: "Kyle Kirkpatrick"
+date: "4/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import Libraries
+
+```{r import, include=FALSE}
+library(DBI)
+library(odbc)
+library(dplyr)
+library(dbplyr)
+library(coinmarketcapr)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(olsrr)
+
+```
+
+## Database Connection
+
+```{r connect}
+# obdc connection
+con <- dbConnect(odbc::odbc(), "serverCon")
+
+```
+
+## History of Cryptocurrency market cap
+
+```{r history}
+# reads in a csv of crytocurrency market cap history
+tmc = read_csv("coinmarket-cap-and-volume-2013-04-28-2020-05-21.csv") %>% 
+  mutate( # mutates the data
+    market_cap_B = market_cap/1e9,
+    market_cap_B_log10 = market_cap_B %>% log10(),
+  )
+
+# labels x and y axis
+x_lab = "Year"
+y_lab = "Total crypto market cap in billions of USD"
+
+# plots a linear model
+tmc %>% 
+  filter(!is.na(market_cap_B)) %>% 
+  ggplot(aes(datetime, market_cap_B)) +
+  geom_line() +
+  scale_x_datetime(x_lab) +
+  scale_y_continuous(y_lab)
+
+# plots a logarithmic model
+tmc %>% 
+  filter(!is.na(market_cap_B)) %>% 
+  ggplot(aes(datetime, market_cap_B_log10)) +
+  geom_line() +
+  scale_x_datetime(x_lab) +
+  scale_y_continuous(y_lab)
+
+# creates a linear model and performs a regression on the market cap
+loglin = lm(market_cap_B_log10 ~ as.numeric(datetime), data = tmc)
+ols_regress(loglin)
+
+#add fitted and predicted values
+tmc$market_cap_B_log10_pred_loglin = predict(loglin, newdata = tmc)
+tmc$market_cap_B_pred_loglin = 10^tmc$market_cap_B_log10_pred_loglin
+
+# replot with the new trend line
+tmc %>% 
+  ggplot(aes(datetime)) +
+  geom_line(mapping = aes(y = market_cap_B_log10)) +
+  geom_line(mapping = aes(y = market_cap_B_log10_pred_loglin), color = "blue") +
+  scale_x_datetime(x_lab) +
+  scale_y_continuous(y_lab)
+
+```
+
+
+
+## Cryptocurrency Market Cap Plots
+```{r crypto}
+
+
+# read in the csv and adds additional columns of data
+coinHistory <- read_csv("coinMarketCV2.csv") %>% 
+  mutate(
+    date = as.Date(date),
+    marketcap2 = marketcap/1e9,
+    marketcaplog10 = marketcap2 %>% log10(),
+  )
+
+# labels the axis
+x_lab = "Months of 2021"
+y_lab = "Total crypto market cap in billions of USD"
+
+# linear plot of market cap (BTC) vs time
+coinHistory %>% 
+  filter(!is.na(marketcap2)) %>% 
+  ggplot(aes(date, marketcap2)) +
+  geom_line() +
+  scale_x_date(x_lab) +
+  scale_y_continuous(y_lab)
+
+# logarithmic plot of market cap vs time
+coinHistory %>% 
+  filter(!is.na(marketcap2)) %>% 
+  ggplot(aes(date, marketcaplog10)) +
+  geom_line() +
+  scale_x_date(x_lab) +
+  scale_y_continuous(y_lab)
+
+```
+
+## Prediction Model
+
+```{r model, include=FALSE}
+# creates a linear model based on the market cap
+model = lm(marketcaplog10 ~ as.numeric(date), data = coinHistory)
+# performs a linear regression
+ols_regress(model)
+```
+
+```{r prediction}
+# prediction trend based on the linear model
+coinHistory$marketlog10pred = predict(model, newdata = coinHistory)
+coinHistory$marketcappred = 10^coinHistory$marketlog10pred
+
+# plots the market cap vs month with a prediction trend line
+coinHistory %>% 
+  ggplot(aes(date)) +
+  geom_line(mapping = aes(y = marketcaplog10)) +
+  geom_line(mapping = aes(y = marketlog10pred), color = "blue") +
+  scale_x_date(x_lab) +
+  scale_y_continuous(y_lab)
+
+#coinHistory %>% filter(date == 1/5/2021)
+
+predict(object = model, newdata = coinHistory)
+```
+
+
